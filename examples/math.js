@@ -3,14 +3,17 @@
  Expressions consists of numbers, parentheses, and the operators +,-,*,/,%
  */
 "use strict";
-//Import tenrec
+
+//Import
 var tenrec = require("../src/tenrec.js");
 var util = require("util");
 
+//Create a grammar with closure
 var math = new function () {
+    this.lbrace = tenrec.word(tenrec.text("("));
+    this.rbrace = tenrec.word(tenrec.text(")"));
     this.mul_op = tenrec.word(tenrec.charSet("*/%"));
     this.add_op = tenrec.word(tenrec.charSet("+-"));
-
     this.number = tenrec.transform(
         tenrec.seq(
             tenrec.digit,
@@ -28,21 +31,30 @@ var math = new function () {
     this.brace_expr = tenrec.delay(() => {
         return tenrec.transform(
             tenrec.seq(
-                tenrec.text("("),
-                this.add_expr,
-                tenrec.text(")")
+                this.lbrace,
+                this.expr,
+                this.rbrace
             ), (results) => results[1]
         );
     });
 
+    this.neg_expr = tenrec.delay(() => {
+        return tenrec.seq(
+            this.add_op,
+            this.atom
+        );
+    });
+
+
     this.atom = tenrec.either(
         this.brace_expr,
+        this.neg_expr,
         tenrec.word(this.number)
     );
 
     this.mul_expr = tenrec.transform(
         tenrec.seq(
-            this.number,
+            this.atom,
             tenrec.many(tenrec.seq(
                 this.mul_op,
                 this.atom
@@ -58,16 +70,23 @@ var math = new function () {
                 this.add_op,
                 this.mul_expr
             ))
-        ), (results) => [results[0]].concat(results[1])
+        ), (results) => results[1].length
+            ? [results[0][0]].concat(results[1].map((el) => [el[0], el[1][0]]))
+            : results[0]
     );
 
-
+    this.expr = this.add_expr;
 }
 
-
+//Driver code
 function main() {
     var opts = { "depth": null, "colors": "auto" };
-    console.log(util.inspect(math.mul_expr.parse("(1*2)"), opts));
+    var input = "(1 + 2) * 3";
+    var [ast, error] = math.expr.parse(input);
+
+    console.log("ast: " + util.inspect(ast, opts)
+        + "\n" + new Array(40).join("="));
+    console.log("error: " + util.inspect(error, opts));
 }
 
 main();

@@ -302,16 +302,22 @@ var tenrec = new function () {
     this.ws = many(charSet(" \t\n\x0B\f\r"));
     
     this.any = new Parser(function (res) {
-        return res.success(new Token(res.text, 0, res.text.length));
+        var pos_start = res.pos;
+    var t = res.text.substring(res.pos);
+        while(res.current_char !== null) {
+        res.register(res.advance());
+        }
+
+        return res.success(new Token(t, pos_start, res.pos));
     });
 
     this.anyChar = new Parser(function (res) {
-        if (res.text.length === 0) {
+        if(res.current_char === null) {
             return res.failure(new ParserError(0));
-        } else if (res.text.length === 1) {
-            return res.success(new Token(res.text, 0, res.text.length));
         } else {
-            return res.failure(new ParserError(1));
+        var char = res.current_char;
+        res.register(res.advance());
+        return res.success(new Token(char, res.pos-1, res.pos));
         }
     });
 
