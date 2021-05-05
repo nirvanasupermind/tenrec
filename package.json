@@ -1,6 +1,6 @@
 {
   "name": "tenrec",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Javascript parser combinator library",
   "main": "src/tenrec.js",
   "directories": {
