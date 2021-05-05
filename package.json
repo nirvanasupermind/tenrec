@@ -1,0 +1,34 @@
+{
+  "name": "tenrec",
+  "version": "0.1.0",
+  "description": "Javascript parser combinator library",
+  "main": "src/tenrec.js",
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nirvanasupermind/tenrec.git"
+  },
+  "keywords": [
+    "parse",
+    "parser",
+    "combinator",
+    "combinatory",
+    "combinatory",
+    "parsing",
+    "functional",
+    "parsing",
+    "parser",
+    "combinators"
+  ],
+  "author": "nirvanasupermind",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/nirvanasupermind/tenrec/issues"
+  },
+  "homepage": "https://github.com/nirvanasupermind/tenrec#readme"
+}
