@@ -1,282 +1,136 @@
+//tenrec Library
+//Usage permitted under terms of MIT License
 var tenrec = new function () {
+    /////////////////////////////////////////
+    //TOKENS
     ////////////////////////////////////////
-    //UTILITY FUNCTIONS
-    ////////////////////////////////////////
-    //evil typescript hack
-    var __extends = (this && this.__extends) || function (d, b) {
-        for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
-        function __() { this.constructor = d; }
-        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
-    };
-
-    Array.prototype.failed = function () { return !!this[1]; }
-
-    function parseInteger(v) {
-        return Math.trunc(parseFloat(v));
+    /**
+     * Token with position indices.
+     * @param {*} value 
+     * @param {number} pos_start 
+     * @param {number} pos_end 
+     */
+    function Token(value, pos_start, pos_end) {
+        if (!(this instanceof Token)) {
+            return new Token(value, pos_start, pos_end);
+        } else {
+            this.value = value;
+            this.pos_start = parseInteger(pos_start);
+            this.pos_end = parseInteger(pos_end);
+        }
     }
 
-    
     ////////////////////////////////////////
-    //ERRORS
+    //HELPER FUNCTIONS
     ////////////////////////////////////////
+    function parseInteger(a) { return Math.trunc(parseFloat(a)); }
+    function isArray(a) {
+        return Object.prototype.toString.call(a) === "[object Array]";
+    }
+
+    function pos_start(a) {
+        if (isArray(a)) {
+            return a.map(pos_start)[0];
+        } else {
+            return a.pos_start;
+        }
+    }
+
+    function pos_end(a) {
+        if (isArray(a)) {
+            return a.map(pos_end).pop();
+        } else {
+            return a.pos_end;
+        }
+    }
+
+    // function failed(n) { return n[1]; }
+
+    ////////////////////////////////////////
+    //PARSER ERROR
+    ////////////////////////////////////////
+    /**
+     * Stores an error location.
+     * @param {number} pos
+     */
     function ParserError(pos) {
-        this.pos = parseInteger(pos);
+        this.pos = parseInt(pos);
     }
 
     ParserError.prototype.offset = function (i) {
-        return new ParserError(this.pos+i);
-    }
-
-    ////////////////////////////////////////
-    //PARSER
-    ////////////////////////////////////////
-    function Parser() { }
-    Parser.prototype.parse = function () {
-        throw "Unimplemented";
+        return new ParserError(this.pos + i);
     }
 
 
     ////////////////////////////////////////
-    __extends(TextParser, Parser);
-    function TextParser(text) {
-        Parser.call(this);
-        this.text = ""+text;
+    //PARSE RESULT
+    ////////////////////////////////////////
+    function ParseResult(text) {
+        this.text = text;
+        this.current_char = null;
+        this.pos = -1;
+        this.advance();
+
+        this.ast = null;
+        this.error = null;
     }
 
-    TextParser.prototype.parse = function (text) {
-        text = ""+text;
-        if (text === this.text) {
-            return [text, null];
-        } else {
-            var i = 0;
-            while (i < this.text.length && text.charAt(i) === this.text.charAt(i)) {
-                i++;
-            }
 
-            return [null, new ParserError(i)];
+    ParseResult.prototype.advance = function () {
+        this.pos++;
+        this.current_char = this.pos < this.text.length
+            ? this.text.charAt(this.pos)
+            : null;
+    }
+
+
+    ParseResult.prototype.copy = function () {
+        return { "ast": this.ast, "error": this.error, "__proto__": ParseResult.prototype }
+    }
+
+    ParseResult.prototype.register = function (res) {
+        if (res instanceof ParseResult) {
+            if (res.error) return this.failure(res.error);
+            return res.ast;
         }
+    }
+
+    ParseResult.prototype.success = function (ast) {
+        this.ast = ast;
+        return this;
+    }
+
+    ParseResult.prototype.failure = function (error) {
+        this.ast = null;
+        this.error = error;
+        return this;
+    }
+
+
+    ////////////////////////////////////////
+    //PARSER 
+    ////////////////////////////////////////
+    /**
+     * An internal parser class.
+     * @param {function} run 
+     */
+    function Parser(run) {
+        this.run = run;
+    }
+
+    Parser.prototype.parse = function (text) {
+        var res = new ParseResult(text);
+        this.run(res);
+
+        if (res.pos < text.length) {
+            return [null, new ParserError(res.pos)];
+        }
+
+        return [res.ast, res.error];
     }
 
     ////////////////////////////////////////
-    __extends(EitherParser, Parser);
-    function EitherParser(parser, parser2) {
-        Parser.call(this);
-        this.parser = parser;
-        this.parser2 = parser2;
-    }
-
-    EitherParser.prototype.parse = function (text) {
-        text = ""+text;
-
-        var [result,error] = this.parser.parse(text);
-        if(error) return this.parser2.parse(text);
-        return [result,error];
-    }
-
-    /////////////////////////////////////////
-    __extends(CharSetParser, Parser);
-    //Returns a parser that expects one of the characters.
-    function CharSetParser(chars) {
-        Parser.call(this);
-        this.chars = ""+chars;
-    }
-
-    CharSetParser.prototype.parse = function (text) { 
-        text = ""+text;
-        if(text.length === 0) return [null, new ParserError(0)];
-        if(text.length >= 2) return [null, new ParserError(1)];
-        
-        if(this.chars.split("").includes(text)) {
-            return [text, null];
-        } else {
-            return [null, new ParserError(0)];
-        }
-    }
-
-    ////////////////////////////////////////
-    __extends(NotParser, Parser);
-    //Returns a new parser that succeeds only if the parser fails. 
-    function NotParser(parser) {
-        Parser.call(this);
-        this.parser = parser;
-    }
-
-    NotParser.prototype.parse = function (text) {
-        text = ""+text;
-        var [_,error] = this.parser.parse(text);
-        if(error) {
-            return [text,null];
-        } else {
-            var i = 0;
-            while(i < text.length
-                  && this.parser.parse(text.substring(0,i)).failed()) {
-                i++;
-            }
-    
-            return [null,new ParserError(i-1)];
-        }
-    }
-
-    ////////////////////////////////////////    
-    __extends(SeqParser, Parser);
-
-    //Creates a parser that matches a series of parsers in order.
-    function SeqParser(parser, parser2) {
-        Parser.call(this);
-        this.parser = parser;
-        this.parser2 = parser2;
-    }
-
-    SeqParser.prototype.parse = function (text) {
-        text = ""+text;
-
-        var i = 0;
-        while(i < text.length 
-             && this.parser.parse(text.substring(0,i)).failed()) {
-            i++;
-        }
-        
-        var a = text.substring(0,i), b = text.substring(i);
-
-        var [result1, error1] = this.parser.parse(a);
-        if(error1) return [null,error1];
-        
-        var [result2, error2] = this.parser2.parse(b);   
-        if(error2) return [null,error2.offset(i)];
-        
-        if(this.parser instanceof SeqParser && Array.isArray(result1)) {
-            return [result1.concat(result2),null];
-        } else {
-            return [[result1,result2],null];
-        }
-    }
-    
-    //////////////////////////////////////// 
-    __extends(DelayParser,Parser);
-    function DelayParser(f) {
-        Parser.call(this);
-        this.f = f;
-    }   
-
-    DelayParser.prototype.parse = function(text) {
-        text = ""+text;
-        return this.f().parse(text);
-    }
-
-    //////////////////////////////////////// 
-    __extends(RepeatParser,Parser);
-    //Consumes parser between min and max times inclusive.
-    function RepeatParser(parser,min,max) {
-        Parser.call(this);
-        this.parser = parser;
-        this.min = parseInteger(min);
-        this.max = parseInteger(max);
-    }
-
-    RepeatParser.prototype.parse = function (text) {
-        text = ""+text;
-
-        if(this.min <= 0 && text === "") return [[],null];
-        var accum = [];
-        var i = 0;
-        while(i < text.length 
-                && this.parser.parse(text.substring(i)).failed()) {
-            i++;
-        }
-        
-        var offset = 0;
-        var flag = false;
-        var k = 0;
-
-
-        while(true) {
-            if(accum.length > this.max) return [null,new ParserError(offset)];
-            var j = i;
-            i = 0;
-            while(i < j && this.parser.parse(text.substring(i,j)).failed()) {
-                i++;
-            }
-
-            offset += i;
-
-            var t = text.substring(i,j);
-            if(t === "") {
-                var k = 0;
-                while(k < text.length && this.parser.parse(text.substring(k)).failed()) {
-                    k++;
-                }
-
-                t = text.substring(k);
-                flag = true;
-            }
-
-            var a = this.parser.parse(t);
-            if(a.failed()) {
-                if(offset === 0) {
-                    return a;
-                } else {
-                    return [null,a[1].offset(offset-1)];
-                }
-            }
-
-
-            accum.push(a[0]);
-            if(flag === true) break;
-        }
-        
-
-        if(accum.length > this.max) return [null,new ParserError(k)];
-        if(accum.length < this.min) return [null,new ParserError(k)];
-        return [accum,null];
-    }
-
-
-    //////////////////////////////////////// 
-    __extends(ManyParser,RepeatParser);
-    //Consumes parser zero or more times.
-    function ManyParser(parser) {
-        RepeatParser.call(this,parser,0,Infinity);
-    }
-
-    //////////////////////////////////////// 
-    __extends(OptParser,EitherParser);
-    //Consumes parser zero or one times.
-    function OptParser(parser) {
-        EitherParser.call(this,text(""),parser);
-    }
-
-    //////////////////////////////////////// 
-    __extends(WithWsParser,TransformParser);
-    //Expects optional whitespace after parser.
-    function WithWsParser(parser) {
-        TransformParser.call(this,new SeqParser(parser,tenrec.optWs), (c) => c[0]);
-    }
-
-    WithWsParser.prototype.parse = function (text) {
-        return new TransformParser(this.parser, this.f).parse(text);
-    }
-    
-    //////////////////////////////////////// 
-    //Applies f to the output of parser.
-    __extends(TransformParser,Parser);
-    function TransformParser(parser,f) {
-        Parser.call(this);
-        this.parser = parser;
-        this.f = f;
-    }
-
-    TransformParser.prototype.parse = function (text) {
-        text = ""+text;
-
-        var t = this.parser.parse(text);
-        if(t.failed()) 
-            return t;
-        else
-            return [this.f(t[0]),null];
-    }
-
-    ////////////////////////////////////////
-    //CORE PARSERS
+    //FACTORY 
     ////////////////////////////////////////
     /**
      * Returns a parser that expects the text.
@@ -284,119 +138,200 @@ var tenrec = new function () {
      */
     function text(text) {
         text = "" + text;
-        return new TextParser(text);
+
+        return new Parser(function (res) {
+            var pos_start = res.pos;
+            // var res = new ParseResult();
+            var str = "";
+            var i = 0;
+            while (i < text.length) {
+                if (res.current_char !== text.charAt(i)) {
+                    return res.failure(new ParserError(i));
+                }
+
+                res.register(res.advance());
+                i++;
+            }
+
+
+            return res.success(new Token(text, pos_start, pos_start + text.length));
+        })
     }
 
     /**
-     * Returns a new parser that tries to match each parser in order until one succeeds. 
+     * Tries to match each parser in order until one succeeds.
+     * 
+     * If two parsers match the same prefix, the longer of the two must come first. 
      * @param  {...Parser} parsers 
      */
     function either(...parsers) {
-        return parsers.reduce((a,b) => new EitherParser(a, b));
+        if (parsers.length > 2) {
+            return either(parsers[0], either(...parsers.slice(1)));
+        } else {
+            var parser1 = parsers[0];
+            var parser2 = parsers[1];
+            return new Parser(function (res) {
+                var t1 = res.register(parser1.run(res));
+                if (res.error) {
+                    res.error = null;
+                    // this.set_text(this.text);
+                    var t2 = res.register(parser2.run(res));
+                    if (res.error) return res;
+                    return res.success(t2);
+                } else {
+                    return res.success(t1);
+                }
+            });
+        }
     }
 
+    // /**
+    //  * Returns a new parser that succeeds if `parser` fails.
+    //  * @param {Parser} parser 
+    //  */
+    // function not(parser) {
+    //     return new Parser(function (res) {
+    //         var t = res.register(parser.run(res));
+    //         if(res.error) {
+    //             res.failure(null);
+    //             var pos = t.pos;
+
+    //             for(var i = 0; i <= pos; i++) {
+    //                 res.register(res.advance());
+    //             }
+
+    //             return res.success(new Token(res.text,0,res.text.length));
+    //         } else {
+    //             res.success(null);
+    //             return res.failure(new ParserError(pos_start(t)));
+    //         }
+    //     });
+    // }
 
     /**
-     * Returns a parser that expects one of the characters.
-     * @param {string} chars 
-     */
-    function charSet(chars) {
-        chars = ""+chars;
-        return new CharSetParser(chars);
-    }
-    
-    /**
-     * Returns a new parser that succeeds only if `parser` fails. 
-     * If it succeeds, it will return the input text.
-     * @param  {Parser} parser 
-     */
-    function not(parser) {
-        return new NotParser(parser);
-    }
-
-    /**
-     * Creates a parser that matches a series of parsers in order.
+     * Expects a series of parsers in order.
      * @param  {...Parser} parsers 
      */
     function seq(...parsers) {
-        return parsers.reduce((a,b) => new SeqParser(a, b));
-    }
-    
-    /**
-     * Consumes `parser` between `min` and `max` times inclusive.
-     * @param {Parser} parser 
-     * @param {number} min 
-     * @param {number} [max]
-     */
-    function repeat(parser, min, max=null) {
-        if(max === null) max = min;
-        return new RepeatParser(parser, min, max);
+        return new Parser(function (res) {
+            var accum = [];
+            for (var i = 0; i < parsers.length; i++) {
+                var tmp = res.register(parsers[i].run(res));
+                if (res.error) return res;
+                accum.push(tmp);
+            }
+
+            // console.log(res.pos,result)
+
+            return res.success(accum);
+        })
     }
 
     /**
-     * Consumes `parser` zero or more times.
-     * @param {Parser} parser 
-     */
+     * Expects `parser` zero or more times.
+     * @param  {Parser} parser 
+    */
     function many(parser) {
-        return new ManyParser(parser);
-    }    
-    
-    /**
-     * Creates a parser from a function, which is evaluated the first time the parser is used. 
-     * This allows for recursive parsers.
-     * @param {function} f 
-     */
-    function delay(f) {
-        var parser = new DelayParser(f);
-        return parser;
+        return new Parser(function (res) {
+            var accum = [];
+
+            while (true) {
+                var result = res.register(parser.run(res));
+                if (res.error) {
+                    res.error = null;
+                    return res.success(accum);
+                } else {
+                    accum.push(result);
+                }
+            }
+        });
     }
+
 
     /**
      * Applies `f` to the output of `parser`.
      * @param {Parser} parser 
      * @param {function} f 
      */
-    function transform(parser,f) {
-        return new TransformParser(parser,f);
+    function transform(parser, f) {
+        return new Parser(function (res) {
+            var value = res.register(parser.run(res));
+            if (res.error) return res;
+            return res.success(f(value));
+        });
     }
 
     /**
-     * Consumes `parser` zero or one times.
+     * Returns a parser that expects one of the characters.
+     * @param {string} chars 
+     */
+    function charSet(chars) {
+        chars = "" + chars;
+        return either(...chars.split("").map(text));
+    }
+
+    /**
+     * Expects whitespace after `parser`.
      * @param {Parser} parser 
      */
-    function opt(parser) {
-        return new OptParser(parser);
+    function word(parser) {
+        return transform(seq(parser,tenrec.ws), (results) => results[0]);
     }
 
     /**
-     * Expects optional whitespace after `parser`.
-     * @param {Parser} parser
+     * Creates a parser from a function that is evaluated 
+     * the first time the parser is used.
+     * This is useful for implementing recursive parsers.
+     * @param {function} f 
      */
-    function withWs(parser) {
-        return new WithWsParser(parser);
+    function delay(f) {
+        var parser = new Parser(function (res) {
+            parser.run = f().run;
+            return parser.run(res);
+        });
+
+        return parser;
     }
+
 
     this.digit = charSet("0123456789");
     this.lowerCase = charSet("abcdefghijklmnopqrstuvwxyz");
     this.upperCase = charSet("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
     this.letter = charSet("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ");
     this.alphaNumeric = charSet("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ");
-    this.ws = transform(many(charSet("\t\n\x0B\f\r")), (c) => c.join(""));
-    this.optWs = opt(this.ws);
+    this.ws = many(charSet(" \t\n\x0B\f\r"));
     
+    this.any = new Parser(function (res) {
+        return res.success(new Token(res.text, 0, res.text.length));
+    });
+
+    this.anyChar = new Parser(function (res) {
+        if (res.text.length === 0) {
+            return res.failure(new ParserError(0));
+        } else if (res.text.length === 1) {
+            return res.success(new Token(res.text, 0, res.text.length));
+        } else {
+            return res.failure(new ParserError(1));
+        }
+    });
+
+
+    this.Token = Token;
+    this.ParserError = ParserError;
+    this.Parser = Parser;
     this.text = text;
     this.either = either;
-    this.charSet = charSet;
-    this.not = not;
     this.seq = seq;
-    this.repeat = repeat;
-    this.many = many;
-    this.delay = delay;
     this.transform = transform;
-    this.opt = opt;
-    this.withWs = withWs;
+    this.many = many;
+    this.charSet = charSet;
+    this.word = word;
+    this.delay = delay;
 }
 
+
+
+//Module exports.
 if (typeof module === "object" && module.exports) {
     module.exports = tenrec;
 } else if (typeof define === "function" && define.amd) {

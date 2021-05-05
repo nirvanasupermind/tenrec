@@ -1,11 +1,11 @@
 var tenrec = require("./tenrec.js");
+var util = require("util");
 function main() {
-    var parser = tenrec.withWs(tenrec.seq(
-        tenrec.text("::"),
-        tenrec.either(tenrec.alphaNumeric,tenrec.text("_")),
-    ));
+    var opts = { "depth": null, "colors": "auto" }
+    var parser = tenrec.word(tenrec.digit);
 
-    console.log(parser.parse("::a "));
+    console.log(util.inspect(parser.parse("8 "), opts));
 }
 
 main();
+
