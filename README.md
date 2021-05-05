@@ -1,4 +1,5 @@
 # tenrec
+[![npm version](https://badge.fury.io/js/tenrec.svg)](https://badge.fury.io/js/tenrec)<br>
 **tenrec** is an efficient parser combinator library for JavaScript. It is an API, not a code generation tool.
 
 # Examples
